@@ -62,7 +62,7 @@ export function parseLevel(def: LevelDef): LevelState {
         objects.push({ kind: "box", x, y });
       } else if (ch === "W") {
         objects.push({ kind: "wood", x, y });
-      } else if (ch === "I") {
+      } else if (ch === "i") {
         objects.push({ kind: "ice", x, y });
       } else if (ch === "@") {
         osea = { id: "osea", x, y, dir: "right" };
