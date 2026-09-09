@@ -3,7 +3,7 @@ import type { LevelDef } from "./types";
 /**
  * Map legend
  *  # wall   . floor   @ Osea   & Lois
- *  $ stone box   W wood (Osea burns)   I ice (Lois pops)
+ *  $ stone box   W wood (Osea burns)   i ice (Lois pops)
  *  E exit   F lava (only Osea)   ~ water (only Lois)
  *  1-9 pressure plate channel   A-I gate (A=1 … I=9)
  */
@@ -25,12 +25,12 @@ export const LEVELS: LevelDef[] = [
     id: "2",
     title: "Împinge",
     lesson: "Cutii",
-    hint: "Mergi în cutie ca s-o împingi. Fiecare își curăță culoarul până la portal.",
+    hint: "Mergi în cutie ca s-o împingi. Împinge-o dincolo de portal, apoi oprește-te pe portal.",
     map: [
       "###########",
-      "#@..$....E#",
+      "#@..$...E.#",
       "###########",
-      "#&..$....E#",
+      "#&..$...E.#",
       "###########",
     ],
   },
@@ -99,7 +99,7 @@ export const LEVELS: LevelDef[] = [
       "###########",
       "#@.......E#",
       "#.........#",
-      "#&..I.I..E#",
+      "#&..i.i..E#",
       "###########",
     ],
   },
@@ -140,7 +140,7 @@ export const LEVELS: LevelDef[] = [
       "#............#",
       "#~~~~........#",
       "#FFF.........#",
-      "#&..I.I....2E#",
+      "#&..i.i....2E#",
       "##############",
     ],
     plateIsExit: [2],
