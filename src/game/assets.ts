@@ -16,18 +16,23 @@ export interface GameAssets {
   };
 }
 
-function loadImage(src: string) {
+function assetUrl(path: string) {
+  const clean = path.replace(/^\/+/, "");
+  return `${import.meta.env.BASE_URL}${clean}`;
+}
+
+function loadImage(path: string) {
+  const src = assetUrl(path);
   return new Promise<HTMLImageElement>((resolve, reject) => {
     const img = new Image();
-    img.crossOrigin = "anonymous";
     img.onload = () => resolve(img);
     img.onerror = () => reject(new Error(`Failed to load ${src}`));
     img.src = src;
   });
 }
 
-async function loadMany(urls: string[]) {
-  return Promise.all(urls.map(loadImage));
+async function loadMany(paths: string[]) {
+  return Promise.all(paths.map(loadImage));
 }
 
 export async function loadAssets(): Promise<GameAssets> {
@@ -36,14 +41,14 @@ export async function loadAssets(): Promise<GameAssets> {
     Promise.all(
       dirs.map(async (d) => {
         const frames = await loadMany(
-          [1, 2, 3, 4].map((n) => `/sprites/${who}/${d}-${n}.png`),
+          [1, 2, 3, 4].map((n) => `sprites/${who}/${d}-${n}.png`),
         );
         return [d, frames] as const;
       }),
     ).then((pairs) => Object.fromEntries(pairs) as Record<DirName, HTMLImageElement[]>);
 
   const atk = (who: string) =>
-    loadMany(Array.from({ length: 16 }, (_, i) => `/sprites/${who}/atk-${String(i).padStart(2, "0")}.png`));
+    loadMany(Array.from({ length: 16 }, (_, i) => `sprites/${who}/atk-${String(i).padStart(2, "0")}.png`));
 
   const [
     oseaWalk,
@@ -67,18 +72,18 @@ export async function loadAssets(): Promise<GameAssets> {
     walk("lois"),
     atk("osea"),
     atk("lois"),
-    loadMany([1, 2, 3, 4].map((n) => `/sprites/fx/fire-${n}.png`)),
-    loadMany([1, 2, 3, 4].map((n) => `/sprites/fx/bubble-${n}.png`)),
-    loadImage("/tiles/floor.png"),
-    loadImage("/tiles/lava.png"),
-    loadImage("/tiles/water.png"),
-    loadImage("/props/box.png"),
-    loadImage("/props/crate.png"),
-    loadImage("/props/ice.png"),
-    loadImage("/props/plate.png"),
-    loadImage("/props/plate-on.png"),
-    loadImage("/props/portal.png"),
-    loadImage("/props/gate.png"),
+    loadMany([1, 2, 3, 4].map((n) => `sprites/fx/fire-${n}.png`)),
+    loadMany([1, 2, 3, 4].map((n) => `sprites/fx/bubble-${n}.png`)),
+    loadImage("tiles/floor.png"),
+    loadImage("tiles/lava.png"),
+    loadImage("tiles/water.png"),
+    loadImage("props/box.png"),
+    loadImage("props/crate.png"),
+    loadImage("props/ice.png"),
+    loadImage("props/plate.png"),
+    loadImage("props/plate-on.png"),
+    loadImage("props/portal.png"),
+    loadImage("props/gate.png"),
   ]);
 
   return {
