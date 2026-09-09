@@ -1,0 +1,11 @@
+{
+  "target": "asset",
+  "mode": "single",
+  "prompt": "",
+  "role": "",
+  "input": "/workspace/assets/processed/png/gate.png",
+  "threshold": 40,
+  "edge_threshold": 150,
+  "duration": 200,
+  "single_size": 256
+}
