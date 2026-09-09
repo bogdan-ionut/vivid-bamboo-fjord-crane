@@ -13,6 +13,7 @@ export interface GameAssets {
     plateOn: HTMLImageElement;
     portal: HTMLImageElement;
     gate: HTMLImageElement;
+    key: HTMLImageElement;
   };
 }
 
@@ -40,9 +41,7 @@ export async function loadAssets(): Promise<GameAssets> {
   const walk = (who: string) =>
     Promise.all(
       dirs.map(async (d) => {
-        const frames = await loadMany(
-          [1, 2, 3, 4].map((n) => `sprites/${who}/${d}-${n}.png`),
-        );
+        const frames = await loadMany([1, 2, 3, 4].map((n) => `sprites/${who}/${d}-${n}.png`));
         return [d, frames] as const;
       }),
     ).then((pairs) => Object.fromEntries(pairs) as Record<DirName, HTMLImageElement[]>);
@@ -67,6 +66,7 @@ export async function loadAssets(): Promise<GameAssets> {
     plateOn,
     portal,
     gate,
+    key,
   ] = await Promise.all([
     walk("osea"),
     walk("lois"),
@@ -84,6 +84,7 @@ export async function loadAssets(): Promise<GameAssets> {
     loadImage("props/plate-on.png"),
     loadImage("props/portal.png"),
     loadImage("props/gate.png"),
+    loadImage("props/key.png"),
   ]);
 
   return {
@@ -91,6 +92,6 @@ export async function loadAssets(): Promise<GameAssets> {
     lois: { walk: loisWalk, atk: loisAtk },
     fx: { fire, bubble },
     tiles: { floor, lava, water },
-    props: { box, crate, ice, plate, plateOn, portal, gate },
+    props: { box, crate, ice, plate, plateOn, portal, gate, key },
   };
 }

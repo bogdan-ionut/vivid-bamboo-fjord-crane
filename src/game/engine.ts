@@ -11,7 +11,14 @@ import {
   tryMove,
 } from "./sim";
 import { completeLevel, loadSave, writeSave, type SaveData } from "./save";
-import { renderFrame, type AbilityFx, type MoveTween, type Particle, type Projectile, type ViewFx } from "./render";
+import {
+  renderFrame,
+  type AbilityFx,
+  type MoveTween,
+  type Particle,
+  type Projectile,
+  type ViewFx,
+} from "./render";
 import type { CharId, LevelState, Screen, SimEvent } from "./types";
 import { DIR_VEC } from "./types";
 
@@ -19,12 +26,18 @@ export interface UiSnapshot {
   screen: Screen;
   levelIndex: number;
   title: string;
+  chapter: string;
   hint: string;
   lesson: string;
+  par: number;
   active: CharId;
   moves: number;
+  orbsCollected: number;
+  orbsTotal: number;
+  hasKey: boolean;
   muted: boolean;
   save: SaveData;
+  medal: number;
   won: boolean;
   ready: boolean;
   loadError: string | null;
@@ -41,9 +54,14 @@ export interface Engine {
   getUi: () => UiSnapshot;
 }
 
+type UndoEntry = {
+  state: LevelState;
+  moves: number;
+};
+
 const STEP = 1 / 60;
-const MOVE_DUR = 0.12;
-const ABILITY_DUR = 0.42;
+const MOVE_DUR = 0.115;
+const ABILITY_DUR = 0.4;
 
 export async function bootEngine(
   canvas: HTMLCanvasElement,
@@ -53,11 +71,11 @@ export async function bootEngine(
   const input: GameInput = createInput();
   let assets: GameAssets | null = null;
   let screen: Screen = "title";
-  let levelIndex = loadSave().lastLevel;
-  let state: LevelState = parseLevel(LEVELS[0]!);
-  let undo: LevelState[] = [];
-  let moves = 0;
   let save = loadSave();
+  let levelIndex = Math.max(0, Math.min(LEVELS.length - 1, save.lastLevel));
+  let state: LevelState = parseLevel(LEVELS[levelIndex]!);
+  let undo: UndoEntry[] = [];
+  let moves = 0;
   let muted = save.muted;
   audio.setMuted(muted);
   let won = false;
@@ -71,48 +89,59 @@ export async function bootEngine(
   let trauma = 0;
   let winT = 0;
   let time = 0;
+  let levelTime = 0;
 
   const tweens: MoveTween[] = [];
   let ability: AbilityFx | null = null;
   const projectiles: Projectile[] = [];
   const particles: Particle[] = [];
 
-  function emitUi() {
+  function makeUi(): UiSnapshot {
     const def = LEVELS[levelIndex]!;
-    onUi({
+    return {
       screen,
       levelIndex,
       title: def.title,
+      chapter: def.chapter,
       hint: def.hint,
       lesson: def.lesson,
+      par: def.par,
       active: state.players[state.active]!.id,
       moves,
+      orbsCollected: state.orbsTotal - state.orbs.length,
+      orbsTotal: state.orbsTotal,
+      hasKey: state.hasKey,
       muted,
       save,
+      medal: save.medals[levelIndex] ?? 0,
       won,
       ready,
       loadError,
-    });
+    };
+  }
+
+  function emitUi() {
+    onUi(makeUi());
   }
 
   function snapshot() {
-    undo.push(cloneState(state));
-    if (undo.length > 80) undo.shift();
+    undo.push({ state: cloneState(state), moves });
+    if (undo.length > 100) undo.shift();
   }
 
-  function burst(tx: number, ty: number, color: string, n = 10) {
+  function burst(tx: number, ty: number, color: string, n = 10, energy = 1) {
     for (let i = 0; i < n; i++) {
       const a = Math.random() * Math.PI * 2;
-      const sp = 1.2 + Math.random() * 2.4;
+      const sp = (1.1 + Math.random() * 2.8) * energy;
       particles.push({
         x: tx + 0.5,
         y: ty + 0.5,
         vx: Math.cos(a) * sp,
-        vy: Math.sin(a) * sp - 0.8,
-        life: 0.35 + Math.random() * 0.25,
-        max: 0.55,
+        vy: Math.sin(a) * sp - 0.9 * energy,
+        life: 0.38 + Math.random() * 0.38,
+        max: 0.76,
         color,
-        size: 2 + Math.random() * 3,
+        size: 2 + Math.random() * 4,
       });
     }
   }
@@ -121,27 +150,41 @@ export async function bootEngine(
     if (!ev) return;
     if (ev.kind === "blocked") {
       audio.blocked();
-      trauma = Math.min(1, trauma + 0.12);
+      trauma = Math.min(1, trauma + 0.1);
       return;
     }
+
     if (ev.kind === "move" || ev.kind === "push") {
       audio.move();
       if (ev.kind === "push") audio.push();
       moves += 1;
+      if (ev.extra === "orb") {
+        audio.orb();
+        if (ev.x !== undefined && ev.y !== undefined) burst(ev.x, ev.y, "#d8b4fe", 24, 1.25);
+      }
+      if (ev.extra === "key") {
+        audio.key();
+        trauma = Math.min(1, trauma + 0.08);
+        if (ev.x !== undefined && ev.y !== undefined) burst(ev.x, ev.y, "#f8d568", 28, 1.2);
+      }
     }
+
     if (ev.kind === "ability") {
       if (ev.extra === "burn") {
+        moves += 1;
         audio.burn();
-        trauma = Math.min(1, trauma + 0.35);
-        if (ev.x !== undefined && ev.y !== undefined) burst(ev.x, ev.y, "#e07a3a", 16);
+        trauma = Math.min(1, trauma + 0.32);
+        if (ev.x !== undefined && ev.y !== undefined) burst(ev.x, ev.y, "#ff8a45", 24, 1.3);
       } else if (ev.extra === "pop") {
+        moves += 1;
         audio.pop();
-        trauma = Math.min(1, trauma + 0.28);
-        if (ev.x !== undefined && ev.y !== undefined) burst(ev.x, ev.y, "#7ec8d6", 16);
+        trauma = Math.min(1, trauma + 0.24);
+        if (ev.x !== undefined && ev.y !== undefined) burst(ev.x, ev.y, "#7de3ff", 24, 1.25);
       } else {
         audio.blocked();
       }
     }
+
     if (ev.kind === "switch") audio.switchChar();
   }
 
@@ -158,11 +201,13 @@ export async function bootEngine(
     moves = 0;
     won = false;
     winT = 0;
+    levelTime = 0;
     tweens.length = 0;
     projectiles.length = 0;
     particles.length = 0;
     ability = null;
     lock = 0;
+    trauma = 0;
     screen = "play";
     save.lastLevel = idx;
     writeSave(save);
@@ -170,15 +215,15 @@ export async function bootEngine(
   }
 
   function checkWin() {
-    if (won) return;
-    if (isWon(state)) {
-      won = true;
-      winT = 0.01;
-      audio.win();
-      save = completeLevel(levelIndex);
-      screen = "win";
-      emitUi();
-    }
+    if (won || !isWon(state)) return;
+    won = true;
+    winT = 0.01;
+    audio.win();
+    const def = LEVELS[levelIndex]!;
+    const collected = state.orbsTotal - state.orbs.length;
+    save = completeLevel(levelIndex, moves, collected, def.par);
+    screen = "win";
+    emitUi();
   }
 
   function applyMove(dx: number, dy: number) {
@@ -194,8 +239,8 @@ export async function bootEngine(
       return;
     }
     beginTween(p.id, fromX, fromY, p.x, p.y);
-    if (ev.kind === "push" && ev.x !== undefined && ev.y !== undefined) {
-      burst(ev.x, ev.y, "#d9c9a8", 6);
+    if (ev.kind === "push") {
+      burst(p.x, p.y, "#d9c9a8", 7, 0.65);
     }
     checkWin();
     emitUi();
@@ -208,19 +253,20 @@ export async function bootEngine(
     const ev = tryAbility(state);
     handleEvent(ev);
     if (!ev || ev.extra === "whiff") {
-      if (ev?.extra === "whiff") undo.pop();
+      undo.pop();
     }
     ability = { who: p.id, t: 0, dur: ABILITY_DUR, dir: p.dir };
     lock = ABILITY_DUR;
     const v = DIR_VEC[p.dir];
     projectiles.push({
-      x: p.x + v.x * 0.6,
-      y: p.y + v.y * 0.6,
-      vx: v.x * 6,
-      vy: v.y * 6,
-      life: 0.28,
+      x: p.x + v.x * 0.58,
+      y: p.y + v.y * 0.58,
+      vx: v.x * 6.4,
+      vy: v.y * 6.4,
+      life: 0.3,
       kind: p.id === "osea" ? "fire" : "bubble",
     });
+    checkWin();
     emitUi();
   }
 
@@ -237,10 +283,13 @@ export async function bootEngine(
       audio.blocked();
       return;
     }
-    state = prev;
+    state = prev.state;
+    moves = prev.moves;
     tweens.length = 0;
+    projectiles.length = 0;
+    particles.length = 0;
+    ability = null;
     lock = 0;
-    moves = Math.max(0, moves - 1);
     emitUi();
   }
 
@@ -260,8 +309,9 @@ export async function bootEngine(
 
   function update(dt: number) {
     time += dt;
+    levelTime += dt;
     if (lock > 0) lock = Math.max(0, lock - dt);
-    trauma = Math.max(0, trauma - dt * 2.2);
+    trauma = Math.max(0, trauma - dt * 2.25);
     if (won) winT += dt;
 
     for (const tw of tweens) tw.t += dt;
@@ -328,6 +378,7 @@ export async function bootEngine(
     const shake = trauma * trauma;
     const fx: ViewFx = {
       time,
+      levelT: levelTime,
       tweens,
       ability,
       projectiles,
@@ -368,10 +419,7 @@ export async function bootEngine(
   raf = requestAnimationFrame(loop);
 
   const probe = {
-    getYaw: () => {
-      const p = state.players[state.active]!;
-      return p.x;
-    },
+    getYaw: () => state.players[state.active]!.x,
     getSpeed: () => (tweens.length ? 1 : 0),
     getX: () => state.players[state.active]!.x,
     getY: () => state.players[state.active]!.y,
@@ -413,20 +461,7 @@ export async function bootEngine(
       writeSave(save);
       emitUi();
     },
-    getUi: () => ({
-      screen,
-      levelIndex,
-      title: LEVELS[levelIndex]!.title,
-      hint: LEVELS[levelIndex]!.hint,
-      lesson: LEVELS[levelIndex]!.lesson,
-      active: state.players[state.active]!.id,
-      moves,
-      muted,
-      save,
-      won,
-      ready,
-      loadError,
-    }),
+    getUi: makeUi,
   };
 }
 

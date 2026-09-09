@@ -19,13 +19,16 @@ export function cloneState(s: LevelState): LevelState {
     w: s.w,
     h: s.h,
     cells: s.cells,
-    players: [
-      { ...s.players[0] },
-      { ...s.players[1] },
-    ],
+    players: [{ ...s.players[0] }, { ...s.players[1] }],
     objects: s.objects.map((o) => ({ ...o })),
     active: s.active,
     plateIsExit: s.plateIsExit,
+    theme: s.theme,
+    requireOrbs: s.requireOrbs,
+    keys: s.keys.map((p) => ({ ...p })),
+    orbs: s.orbs.map((p) => ({ ...p })),
+    orbsTotal: s.orbsTotal,
+    hasKey: s.hasKey,
   };
 }
 
@@ -41,6 +44,8 @@ export function parseLevel(def: LevelDef): LevelState {
     Array.from({ length: w }, () => ({ terrain: "floor" as const })),
   );
   const objects: GridObj[] = [];
+  const keys: { x: number; y: number }[] = [];
+  const orbs: { x: number; y: number }[] = [];
   let osea: Player | null = null;
   let lois: Player | null = null;
 
@@ -53,6 +58,9 @@ export function parseLevel(def: LevelDef): LevelState {
       else if (ch === "F") cell.terrain = "lava";
       else if (ch === "~") cell.terrain = "water";
       else if (ch === "E") cell.terrain = "exit";
+      else if (ch === "d") cell.door = true;
+      else if (ch === "k") keys.push({ x, y });
+      else if (ch === "*") orbs.push({ x, y });
       else if (ch >= "1" && ch <= "9") {
         cell.plate = ch.charCodeAt(0) - 48;
         if (def.plateIsExit?.includes(cell.plate)) cell.terrain = "exit";
@@ -82,6 +90,12 @@ export function parseLevel(def: LevelDef): LevelState {
     objects,
     active: 0,
     plateIsExit: def.plateIsExit ?? [],
+    theme: def.theme,
+    requireOrbs: Boolean(def.requireOrbs),
+    keys,
+    orbs,
+    orbsTotal: orbs.length,
+    hasKey: false,
   };
 }
 
@@ -113,6 +127,7 @@ function isSolidWall(s: LevelState, x: number, y: number) {
   const c = s.cells[y]?.[x];
   if (!c) return true;
   if (c.terrain === "wall") return true;
+  if (c.door && !s.hasKey) return true;
   if (c.gate && !isGateOpen(s, c.gate)) return true;
   return false;
 }
@@ -131,6 +146,21 @@ function boxCanEnter(s: LevelState, x: number, y: number) {
   if (objectAt(s, x, y)) return false;
   if (playerAt(s, x, y)) return false;
   return true;
+}
+
+function collectAt(s: LevelState, x: number, y: number): "key" | "orb" | undefined {
+  const ki = s.keys.findIndex((p) => p.x === x && p.y === y);
+  if (ki >= 0) {
+    s.keys.splice(ki, 1);
+    s.hasKey = true;
+    return "key";
+  }
+  const oi = s.orbs.findIndex((p) => p.x === x && p.y === y);
+  if (oi >= 0) {
+    s.orbs.splice(oi, 1);
+    return "orb";
+  }
+  return undefined;
 }
 
 export function tryMove(s: LevelState, dx: number, dy: number): SimEvent | null {
@@ -154,7 +184,8 @@ export function tryMove(s: LevelState, dx: number, dy: number): SimEvent | null 
     if (isBridge) {
       p.x = nx;
       p.y = ny;
-      return { kind: "move", who: p.id, extra: "bridge" };
+      const pickup = collectAt(s, nx, ny);
+      return { kind: "move", who: p.id, x: nx, y: ny, extra: pickup ?? "bridge" };
     }
     const bx = nx + dx;
     const by = ny + dy;
@@ -163,14 +194,16 @@ export function tryMove(s: LevelState, dx: number, dy: number): SimEvent | null 
     obj.y = by;
     p.x = nx;
     p.y = ny;
-    return { kind: "push", who: p.id, x: bx, y: by, extra: obj.kind };
+    const pickup = collectAt(s, nx, ny);
+    return { kind: "push", who: p.id, x: nx, y: ny, extra: pickup ?? obj.kind };
   }
 
   if (!hazardOk(s, nx, ny, p.id)) return { kind: "blocked", who: p.id };
 
   p.x = nx;
   p.y = ny;
-  return { kind: "move", who: p.id };
+  const pickup = collectAt(s, nx, ny);
+  return { kind: "move", who: p.id, x: nx, y: ny, extra: pickup };
 }
 
 export function tryAbility(s: LevelState): SimEvent | null {
@@ -201,7 +234,9 @@ export function switchActive(s: LevelState): SimEvent {
 }
 
 export function isWon(s: LevelState) {
-  return s.players.every((p) => s.cells[p.y]?.[p.x]?.terrain === "exit");
+  const portals = s.players.every((p) => s.cells[p.y]?.[p.x]?.terrain === "exit");
+  const shardsReady = !s.requireOrbs || s.orbs.length === 0;
+  return portals && shardsReady;
 }
 
 export function dirFromKeys(dx: number, dy: number): Dir | null {
